@@ -1,0 +1,19 @@
+node_modules
+.secret
+.secret2
+cache
+bin
+# 提供了 .env.example 文件
+.env
+artifacts
+coverage.json
+coverage
+scripts/dep.js
+scripts/portals.js
+typechain/
+flat
+botDaddies.ts
+botDaddies2.ts
+out
+# 防macos生成的文件
+.DS_Store
