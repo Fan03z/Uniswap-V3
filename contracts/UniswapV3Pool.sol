@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.7;
 
-import "./lib/Tick.sol";
-import "./lib/Position.sol";
-import "./interfaces/IERC20.sol";
-import "./interfaces/IUniswapV3MintCallback.sol";
-import "./interfaces/IUniswapV3SwapCallback.sol";
+import "../contracts/lib/Tick.sol";
+import "../contracts/lib/Position.sol";
+import "../contracts/interfaces/IERC20.sol";
+import "../contracts/interfaces/IUniswapV3MintCallback.sol";
+import "../contracts/interfaces/IUniswapV3SwapCallback.sol";
 
 contract UniswapV3Pool {
   using Tick for mapping(int24 => Tick.Info);
@@ -22,6 +22,16 @@ contract UniswapV3Pool {
     uint256 amount1
   );
 
+  event Swap(
+    address indexed sender,
+    address indexed recipient,
+    int256 amount0,
+    int256 amount1,
+    uint160 sqrtPriceX96,
+    uint128 liquidity,
+    int24 tick
+  );
+
   // 用于检查指定tick是否在合法范围内
   error InvalidTickRange();
   // 确保希望提供的流动性不为0
@@ -29,7 +39,6 @@ contract UniswapV3Pool {
   // token转入池子失败
   error InsufficientInputAmount();
 
-  // 流动性 L
   uint128 public liquidity;
 
   int24 internal constant MIN_TICK = -887272;
@@ -49,6 +58,13 @@ contract UniswapV3Pool {
     // 当前 tick
     int24 tick;
   }
+
+  struct CallbackData {
+    address token0;
+    address token1;
+    address payer;
+  }
+
   Slot0 public slot0;
 
   constructor(address token0_, address token1_, uint160 sqrtPriceX96, int24 tick) {
@@ -103,7 +119,7 @@ contract UniswapV3Pool {
     // 且普通的账户地址无法调用,得要合约地址
     // 注意: 要将msg.sender转换为IUniswapV3MintCallback接口类型,这样才能调用其函数
     IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1, data);
-    // 检查是否转入成功
+
     if (amount0 > 0 && balance0Before + amount0 > balance0()) {
       revert InsufficientInputAmount();
     }
@@ -111,8 +127,33 @@ contract UniswapV3Pool {
       revert InsufficientInputAmount();
     }
 
-    // 触发Mint事件
     emit Mint(msg.sender, owner, lowerTick, upperTick, amount, amount0, amount1);
+  }
+
+  /**
+   * @dev 在一对交易对中进行交易,并更新相应价格和流动性
+   * @param recipient token接收者地址
+   * @return amount0
+   * @return amount1
+   */
+  function swap(address recipient, bytes calldata data) public returns (int256 amount0, int256 amount1) {
+    // 依旧先硬编码,后面再换
+    int24 nextTick = 85184;
+    uint160 nextPrice = 5604469350942327889444743441197;
+    amount0 = -0.008396714242162444 ether;
+    amount1 = 42 ether;
+
+    (slot0.tick, slot0.sqrtPriceX96) = (nextTick, nextPrice);
+
+    IERC20(token0).transfer(recipient, uint256(-amount0));
+
+    uint256 balance1Before = balance1();
+    IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
+    if (balance1Before + uint256(amount1) < balance1()) {
+      revert InsufficientInputAmount();
+    }
+
+    emit Swap(msg.sender, recipient, amount0, amount1, slot0.sqrtPriceX96, liquidity, slot0.tick);
   }
 
   ////////////////////////////////////

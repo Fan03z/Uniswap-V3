@@ -49,30 +49,33 @@ module.exports = {
       url: LOCAL_GANACHE_RPC_URL,
       accounts: PRIVATE_KEY !== undefined ? [LOCAL_GANACHE_PRIVATE_KEY] : [],
     },
-    goerli: {
-      url: GOERLI_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      //accounts: {
-      //     mnemonic: MNEMONIC,
-      // },
-      saveDeployments: true,
-      chainId: 5,
-    },
-    mainnet: {
-      url: MAINNET_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      //   accounts: {
-      //     mnemonic: MNEMONIC,
-      //   },
-      saveDeployments: true,
-      chainId: 1,
-    },
-    polygon: {
-      url: POLYGON_MAINNET_RPC_URL,
-      accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
-      saveDeployments: true,
-      chainId: 137,
-    },
+    // goerli: {
+    //   url: GOERLI_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   //accounts: {
+    //   //     mnemonic: MNEMONIC,
+    //   // },
+    //   saveDeployments: true,
+    //   chainId: 5,
+    //   blockConfirmations: 6,
+    // },
+    // mainnet: {
+    //   url: MAINNET_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   //   accounts: {
+    //   //     mnemonic: MNEMONIC,
+    //   //   },
+    //   saveDeployments: true,
+    //   chainId: 1,
+    //   blockConfirmations: 6,
+    // },
+    // polygon: {
+    //   url: POLYGON_MAINNET_RPC_URL,
+    //   accounts: PRIVATE_KEY !== undefined ? [PRIVATE_KEY] : [],
+    //   saveDeployments: true,
+    //   chainId: 137,
+    //   blockConfirmations: 6,
+    // },
   },
   etherscan: {
     // npx hardhat verify --network <NETWORK> <CONTRACT_ADDRESS> <CONSTRUCTOR_PARAMETERS>

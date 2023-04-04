@@ -10,7 +10,7 @@ library Tick {
   /**
    * @dev 更新从self中获得的指定tick对应的Tick.Info对象中的liquidity
    * @param self mapping(int24 => Tick.Info)
-   * @param tick tick(int24类型,即价格区间)
+   * @param tick tick
    * @param liquidityDelta 流动性变化量
    */
   function update(mapping(int24 => Tick.Info) storage self, int24 tick, uint128 liquidityDelta) internal {
