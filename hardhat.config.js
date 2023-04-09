@@ -46,6 +46,7 @@ module.exports = {
       chainId: 31337,
     },
     ganache: {
+      chainId: 5777,
       url: LOCAL_GANACHE_RPC_URL,
       accounts: PRIVATE_KEY !== undefined ? [LOCAL_GANACHE_PRIVATE_KEY] : [],
     },
