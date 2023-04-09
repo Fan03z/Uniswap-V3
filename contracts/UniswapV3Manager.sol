@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.14;
 
 import "../contracts/UniswapV3Pool.sol";
 import "../contracts/interfaces/IERC20.sol";
@@ -9,8 +9,8 @@ contract UniswapV3Manager {
     UniswapV3Pool(poolAddress_).mint(msg.sender, upperTick, lowerTick, liquidity, data);
   }
 
-  function swap(address poolAddress_, bytes calldata data) public {
-    UniswapV3Pool(poolAddress_).swap(msg.sender, data);
+  function swap(address poolAddress_, bool zeroForOne, uint256 amountSpecified, bytes calldata data) public {
+    UniswapV3Pool(poolAddress_).swap(msg.sender, zeroForOne, amountSpecified, data);
   }
 
   function uniswapV3MintCallback(uint256 amount0, uint256 amount1, bytes calldata data) public {

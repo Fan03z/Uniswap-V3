@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.14;
 
 interface IERC20 {
   function approve(address, uint256) external;
