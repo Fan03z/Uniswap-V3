@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.7;
+pragma solidity ^0.8.14;
 
 import "./lib/Tick.sol";
 import "./lib/TickMath.sol";
@@ -71,7 +71,7 @@ contract UniswapV3Pool {
   }
 
   struct SwapState {
-    uint256 amoutSpecifiedRemaining;
+    uint256 amountSpecifiedRemaining;
     uint256 amountCalculated;
     uint160 sqrtPriceX96;
     int24 tick;
@@ -176,8 +176,8 @@ contract UniswapV3Pool {
   ) public returns (int256 amount0, int256 amount1) {
     Slot0 memory slot0_ = slot0;
 
-    SwapState state = SwapState({
-      amoutSpecifiedRemaining: amountSpecified,
+    SwapState memory state = SwapState({
+      amountSpecifiedRemaining: amountSpecified,
       amountCalculated: 0,
       sqrtPriceX96: slot0_.sqrtPriceX96,
       tick: slot0_.tick
