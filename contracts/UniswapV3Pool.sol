@@ -7,6 +7,7 @@ import "./lib/TickBitmap.sol";
 import "./lib/Position.sol";
 import "./lib/Math.sol";
 import "./lib/SwapMath.sol";
+import "./lib/LiquidityMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
@@ -43,6 +44,8 @@ contract UniswapV3Pool {
   error ZeroLiquidity();
   // token转入池子失败
   error InsufficientInputAmount();
+  // 提示池子流动性为0
+  error NotEnoughLiquidity();
 
   uint128 public liquidity;
 
@@ -75,6 +78,7 @@ contract UniswapV3Pool {
     uint256 amountCalculated;
     uint160 sqrtPriceX96;
     int24 tick;
+    uint128 liquidity;
   }
 
   struct StepState {
@@ -114,9 +118,8 @@ contract UniswapV3Pool {
     if (lowerTick >= upperTick || lowerTick < MIN_TICK || upperTick > MAX_TICK) revert InvalidTickRange();
     if (amount == 0) revert ZeroLiquidity();
 
-    // 更新池子流动性
-    bool flippedUpper = ticks.update(upperTick, amount);
-    bool flippedLower = ticks.update(lowerTick, amount);
+    bool flippedUpper = ticks.update(upperTick, int128(amount), false);
+    bool flippedLower = ticks.update(lowerTick, int128(amount), true);
 
     if (flippedUpper) {
       tickBitmap.flipTick(upperTick, 1);
@@ -134,12 +137,16 @@ contract UniswapV3Pool {
 
     Slot0 memory slot0_ = slot0;
 
-    amount0 = Math.calcAmount0Delta(TickMath.getSqrtRatioAtTick(slot0_.tick), TickMath.getSqrtRatioAtTick(upperTick), amount);
+    if (slot0_.tick < lowerTick) {
+      amount0 = Math.calcAmount0Delta(TickMath.getSqrtRatioAtTick(lowerTick), TickMath.getSqrtRatioAtTick(upperTick), amount);
+    } else if (slot0_.tick < upperTick) {
+      amount0 = Math.calcAmount0Delta(slot0_.sqrtPriceX96, TickMath.getSqrtRatioAtTick(upperTick), amount);
+      amount1 = Math.calcAmount1Delta(slot0_.sqrtPriceX96, TickMath.getSqrtRatioAtTick(lowerTick), amount);
 
-    amount1 = Math.calcAmount1Delta(TickMath.getSqrtRatioAtTick(slot0_.tick), TickMath.getSqrtRatioAtTick(lowerTick), amount);
-
-    // 在此合约中,记录流动性变化
-    liquidity += uint128(amount);
+      liquidity = LiquidityMath.addLiquidity(liquidity, int128(amount));
+    } else {
+      amount1 = Math.calcAmount1Delta(TickMath.getSqrtRatioAtTick(lowerTick), TickMath.getSqrtRatioAtTick(upperTick), amount);
+    }
 
     uint256 balance0Before;
     uint256 balance1Before;
@@ -175,12 +182,14 @@ contract UniswapV3Pool {
     bytes calldata data
   ) public returns (int256 amount0, int256 amount1) {
     Slot0 memory slot0_ = slot0;
+    uint128 liquidity_ = liquidity;
 
     SwapState memory state = SwapState({
       amountSpecifiedRemaining: amountSpecified,
       amountCalculated: 0,
       sqrtPriceX96: slot0_.sqrtPriceX96,
-      tick: slot0_.tick
+      tick: slot0_.tick,
+      liquidity: liquidity_
     });
 
     while (state.amountSpecifiedRemaining > 0) {
@@ -201,11 +210,32 @@ contract UniswapV3Pool {
 
       state.amountSpecifiedRemaining -= step.amountIn;
       state.amountCalculated += step.amountOut;
-      state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
+
+      if (state.sqrtPriceX96 == step.sqrtPriceNextX96) {
+        int128 liquidityDelta = ticks.cross(step.nextTick);
+
+        if (zeroForOne) {
+          liquidityDelta = -liquidityDelta;
+        }
+
+        state.liquidity = LiquidityMath.addLiquidity(state.liquidity, liquidityDelta);
+
+        if (state.liquidity == 0) {
+          revert NotEnoughLiquidity();
+        }
+
+        state.tick = zeroForOne ? step.nextTick - 1 : step.nextTick;
+      } else if (state.sqrtPriceX96 != step.sqrtPriceStartX96) {
+        state.tick = TickMath.getTickAtSqrtRatio(state.sqrtPriceX96);
+      }
     }
 
     if (state.tick != slot0_.tick) {
       (slot0.tick, slot0.sqrtPriceX96) = (state.tick, state.sqrtPriceX96);
+    }
+
+    if (liquidity_ != state.liquidity) {
+      liquidity = state.liquidity;
     }
 
     (amount0, amount1) = zeroForOne
