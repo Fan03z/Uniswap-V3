@@ -11,6 +11,7 @@ import "./lib/LiquidityMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
+import "./interfaces/IUniswapV3FlashCallback.sol";
 
 contract UniswapV3Pool {
   using Tick for mapping(int24 => Tick.Info);
@@ -38,6 +39,8 @@ contract UniswapV3Pool {
     int24 tick
   );
 
+  event Flash(address indexed recipient, uint256 amount0, uint256 amount1);
+
   // 用于检查指定tick是否在合法范围内
   error InvalidTickRange();
   // 确保希望提供的流动性不为0
@@ -46,11 +49,10 @@ contract UniswapV3Pool {
   error InsufficientInputAmount();
   // 提示池子流动性为0
   error NotEnoughLiquidity();
+  // 加入滑点保护
+  error InvalidPriceLimit();
 
   uint128 public liquidity;
-
-  int24 internal constant MIN_TICK = -887272;
-  int24 internal constant MAX_TICK = -MIN_TICK;
 
   // 池子代币,设置为不可变变量
   address public immutable token0;
@@ -115,7 +117,7 @@ contract UniswapV3Pool {
     uint128 amount,
     bytes calldata data
   ) external returns (uint256 amount0, uint256 amount1) {
-    if (lowerTick >= upperTick || lowerTick < MIN_TICK || upperTick > MAX_TICK) revert InvalidTickRange();
+    if (lowerTick >= upperTick || lowerTick < TickMath.MIN_TICK || upperTick > TickMath.MAX_TICK) revert InvalidTickRange();
     if (amount == 0) revert ZeroLiquidity();
 
     bool flippedUpper = ticks.update(upperTick, int128(amount), false);
@@ -172,6 +174,7 @@ contract UniswapV3Pool {
    * @param recipient token接收者地址
    * @param zeroForOne 为true时,token0 -> token1,为false时,token1 -> token0
    * @param amountSpecified 用户期望交易的数量
+   * @param sqrtPriceLimitX96 成交价格限制,防滑点
    * @return amount0
    * @return amount1
    */
@@ -179,10 +182,19 @@ contract UniswapV3Pool {
     address recipient,
     bool zeroForOne,
     uint256 amountSpecified,
+    uint160 sqrtPriceLimitX96,
     bytes calldata data
   ) public returns (int256 amount0, int256 amount1) {
     Slot0 memory slot0_ = slot0;
     uint128 liquidity_ = liquidity;
+
+    if (
+      zeroForOne
+        ? sqrtPriceLimitX96 > slot0_.sqrtPriceX96 || sqrtPriceLimitX96 < TickMath.MIN_SQRT_RATIO
+        : sqrtPriceLimitX96 < slot0_.sqrtPriceX96 || sqrtPriceLimitX96 > TickMath.MAX_SQRT_RATIO
+    ) {
+      revert InvalidPriceLimit();
+    }
 
     SwapState memory state = SwapState({
       amountSpecifiedRemaining: amountSpecified,
@@ -192,7 +204,7 @@ contract UniswapV3Pool {
       liquidity: liquidity_
     });
 
-    while (state.amountSpecifiedRemaining > 0) {
+    while (state.amountSpecifiedRemaining > 0 && state.sqrtPriceX96 != sqrtPriceLimitX96) {
       StepState memory step;
 
       step.sqrtPriceStartX96 = state.sqrtPriceX96;
@@ -203,8 +215,10 @@ contract UniswapV3Pool {
 
       (state.sqrtPriceX96, step.amountIn, step.amountOut) = SwapMath.computeSwapStep(
         step.sqrtPriceStartX96,
-        step.sqrtPriceNextX96,
-        liquidity,
+        (zeroForOne ? step.sqrtPriceNextX96 < sqrtPriceLimitX96 : step.sqrtPriceNextX96 > sqrtPriceLimitX96)
+          ? sqrtPriceLimitX96
+          : step.sqrtPriceNextX96,
+        state.liquidity,
         state.amountSpecifiedRemaining
       );
 
@@ -261,6 +275,25 @@ contract UniswapV3Pool {
     }
 
     emit Swap(msg.sender, recipient, amount0, amount1, slot0.sqrtPriceX96, liquidity, slot0.tick);
+  }
+
+  function flash(uint256 amount0, uint256 amount1, bytes calldata data) public {
+    uint256 balance0Before = IERC20(token0).balanceOf(address(this));
+    uint256 balance1Before = IERC20(token1).balanceOf(address(this));
+
+    if (amount0 > 0) {
+      IERC20(token0).transfer(msg.sender, amount0);
+    }
+    if (amount1 > 0) {
+      IERC20(token1).transfer(msg.sender, amount1);
+    }
+
+    IUniswapV3FlashCallback(msg.sender).uniswapV3FlashCallback(data);
+
+    require(IERC20(token0).balanceOf(address(this)) >= balance0Before);
+    require(IERC20(token1).balanceOf(address(this)) >= balance1Before);
+
+    emit Flash(msg.sender, amount0, amount1);
   }
 
   ////////////////////////////////////
