@@ -9,6 +9,7 @@ import "./lib/Math.sol";
 import "./lib/SwapMath.sol";
 import "./lib/LiquidityMath.sol";
 import "./interfaces/IERC20.sol";
+import "./interfaces/IUniswapV3PoolDeployer.sol";
 import "./interfaces/IUniswapV3MintCallback.sol";
 import "./interfaces/IUniswapV3SwapCallback.sol";
 import "./interfaces/IUniswapV3FlashCallback.sol";
@@ -41,6 +42,8 @@ contract UniswapV3Pool {
 
   event Flash(address indexed recipient, uint256 amount0, uint256 amount1);
 
+  // 检查相应代币对是否已初始化
+  error AlreadyInitialized();
   // 用于检查指定tick是否在合法范围内
   error InvalidTickRange();
   // 确保希望提供的流动性不为0
@@ -54,13 +57,15 @@ contract UniswapV3Pool {
 
   uint128 public liquidity;
 
-  // 池子代币,设置为不可变变量
-  address public immutable token0;
-  address public immutable token1;
-
   mapping(int24 => Tick.Info) public ticks;
   mapping(int16 => uint256) public tickBitmap;
   mapping(bytes32 => Position.Info) public positions;
+
+  // Pool parameters
+  address public immutable factory;
+  address public immutable token0;
+  address public immutable token1;
+  uint24 public immutable tickSpacing;
 
   struct Slot0 {
     // 当前 sqrt(p)
@@ -93,9 +98,14 @@ contract UniswapV3Pool {
 
   Slot0 public slot0;
 
-  constructor(address token0_, address token1_, uint160 sqrtPriceX96, int24 tick) {
-    token0 = token0_;
-    token1 = token1_;
+  constructor() {
+    (factory, token0, token1, tickSpacing) = IUniswapV3PoolDeployer(msg.sender).parameters();
+  }
+
+  function initialize(uint160 sqrtPriceX96) public {
+    if (slot0.sqrtPriceX96 != 0) revert AlreadyInitialized();
+
+    int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
     slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
   }
