@@ -36,7 +36,7 @@ library Path {
     return path.length >= MULTIPLE_POOLS_MIN_LENGTH;
   }
 
-  function numsPool(bytes memory path) internal pure returns (uint256) {
+  function numsPools(bytes memory path) internal pure returns (uint256) {
     return (path.length - ADDR_SIZE) / NEXT_OFFSET;
   }
 
@@ -48,9 +48,9 @@ library Path {
     return path.slice(NEXT_OFFSET, path.length - NEXT_OFFSET);
   }
 
-  function decodeFirstPool(bytes memory path) internal pure returns (address tokenIn, address tokenOut, uint24 tickSpacing) {
+  function decodeFirstPool(bytes memory path) internal pure returns (address tokenIn, address tokenOut, uint24 fee) {
     tokenIn = path.toAddress(0);
-    tickSpacing = path.toUint24(ADDR_SIZE);
+    fee = path.toUint24(ADDR_SIZE);
     tokenOut = path.toAddress(NEXT_OFFSET);
   }
 }

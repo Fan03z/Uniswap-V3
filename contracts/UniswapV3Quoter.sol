@@ -9,10 +9,10 @@ import "./interfaces/IUniswapV3Pool.sol";
 contract UniswapV3Quoter {
   using Path for bytes;
 
-  struct QuoteParams {
+  struct QuoteSingleParams {
     address tokenIn;
     address tokenOut;
-    uint24 tickSpacing;
+    uint24 fee;
     uint256 amountIn;
     uint160 sqrtPriceLimitX96;
   }
@@ -23,8 +23,10 @@ contract UniswapV3Quoter {
     factory = factory_;
   }
 
-  function quoteSingle(QuoteParams memory params) public returns (uint256 amountOut, uint160 sqrtPriceX96After, int24 tickAfter) {
-    IUniswapV3Pool pool = getPool(params.tokenIn, params.tokenOut, params.tickSpacing);
+  function quoteSingle(
+    QuoteSingleParams memory params
+  ) public returns (uint256 amountOut, uint160 sqrtPriceX96After, int24 tickAfter) {
+    IUniswapV3Pool pool = getPool(params.tokenIn, params.tokenOut, params.fee);
 
     bool zeroForOne = params.tokenIn < params.tokenOut;
 
@@ -47,15 +49,15 @@ contract UniswapV3Quoter {
     bytes memory path,
     uint256 amountIn
   ) public returns (uint256 amountOut, uint160[] memory sqrtPriceX96AfterList, int24[] memory tickAfterList) {
-    sqrtPriceX96AfterList = new uint160[](path.numsPool());
-    tickAfterList = new int24[](path.numsPool());
+    sqrtPriceX96AfterList = new uint160[](path.numsPools());
+    tickAfterList = new int24[](path.numsPools());
 
     uint256 i = 0;
     while (true) {
-      (address tokenIn, address tokenOut, uint24 tickSpacing) = path.decodeFirstPool();
+      (address tokenIn, address tokenOut, uint24 fee) = path.decodeFirstPool();
 
       (uint256 amountOut_, uint160 sqrtPriceX96After, int24 tickAfter) = quoteSingle(
-        QuoteParams({tokenIn: tokenIn, tokenOut: tokenOut, tickSpacing: tickSpacing, amountIn: amountIn, sqrtPriceLimitX96: 0})
+        QuoteSingleParams({tokenIn: tokenIn, tokenOut: tokenOut, fee: fee, amountIn: amountIn, sqrtPriceLimitX96: 0})
       );
 
       sqrtPriceX96AfterList[i] = sqrtPriceX96After;
@@ -77,7 +79,7 @@ contract UniswapV3Quoter {
 
     uint256 amountOut = amount0Delta > 0 ? uint256(-amount1Delta) : uint256(-amount0Delta);
 
-    (uint160 sqrtPriceX96After, int24 tickAfter) = IUniswapV3Pool(pool).slot0();
+    (uint160 sqrtPriceX96After, int24 tickAfter, , , ) = IUniswapV3Pool(pool).slot0();
 
     assembly {
       let ptr := mload(0x40)

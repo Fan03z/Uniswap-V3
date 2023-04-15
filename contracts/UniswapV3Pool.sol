@@ -7,6 +7,7 @@ import "./lib/TickMath.sol";
 import "./lib/TickBitmap.sol";
 import "./lib/Position.sol";
 import "./lib/Math.sol";
+import "./lib/Oracle.sol";
 import "./lib/SwapMath.sol";
 import "./lib/LiquidityMath.sol";
 import "./interfaces/IERC20.sol";
@@ -16,6 +17,7 @@ import "./interfaces/IUniswapV3SwapCallback.sol";
 import "./interfaces/IUniswapV3FlashCallback.sol";
 
 contract UniswapV3Pool {
+  using Oracle for Oracle.Observation[65535];
   using Tick for mapping(int24 => Tick.Info);
   using TickBitmap for mapping(int16 => uint256);
   using Position for mapping(bytes32 => Position.Info);
@@ -76,6 +78,8 @@ contract UniswapV3Pool {
 
   event Flash(address indexed recipient, uint256 amount0, uint256 amount1);
 
+  event IncreaseObservationCardinalityNext(uint16 observationCardinalityNextOld, uint16 observationCardinalityNextNew);
+
   // Pool parameters
   address public immutable factory;
   address public immutable token0;
@@ -91,12 +95,14 @@ contract UniswapV3Pool {
   mapping(int24 => Tick.Info) public ticks;
   mapping(int16 => uint256) public tickBitmap;
   mapping(bytes32 => Position.Info) public positions;
+  Oracle.Observation[65535] public observations;
 
   struct Slot0 {
-    // 当前 sqrt(p)
     uint160 sqrtPriceX96;
-    // 当前 tick
     int24 tick;
+    uint16 observationIndex;
+    uint16 observationCardinality;
+    uint16 observationCardinalityNext;
   }
 
   struct SwapState {
@@ -136,7 +142,15 @@ contract UniswapV3Pool {
 
     int24 tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
-    slot0 = Slot0({sqrtPriceX96: sqrtPriceX96, tick: tick});
+    (uint16 cardinality, uint16 cardinalityNext) = observations.initialize(_blockTimestamp());
+
+    slot0 = Slot0({
+      sqrtPriceX96: sqrtPriceX96,
+      tick: tick,
+      observationIndex: 0,
+      observationCardinality: cardinality,
+      observationCardinalityNext: cardinalityNext
+    });
   }
 
   function _modifyPosition(
@@ -376,7 +390,19 @@ contract UniswapV3Pool {
     }
 
     if (state.tick != slot0_.tick) {
-      (slot0.tick, slot0.sqrtPriceX96) = (state.tick, state.sqrtPriceX96);
+      (uint16 observationIndex, uint16 observationCardinality) = observations.write(
+        slot0.observationIndex,
+        _blockTimestamp(),
+        slot0.tick,
+        slot0.observationCardinality,
+        slot0.observationCardinalityNext
+      );
+      (slot0.sqrtPriceX96, slot0.tick, slot0.observationIndex, slot0.observationCardinality) = (
+        state.sqrtPriceX96,
+        state.tick,
+        observationIndex,
+        observationCardinality
+      );
     } else {
       slot0.sqrtPriceX96 = state.sqrtPriceX96;
     }
@@ -438,6 +464,20 @@ contract UniswapV3Pool {
     emit Flash(msg.sender, amount0, amount1);
   }
 
+  function observe(uint32[] calldata secondsAgos) public view returns (int56[] memory tickCumulatives) {
+    return observations.observe(_blockTimestamp(), secondsAgos, slot0.tick, slot0.observationIndex, slot0.observationCardinality);
+  }
+
+  function increaseObservationCardinalityNext(uint16 observationCardinalityNext) public {
+    uint16 observationCardinalityNextOld = slot0.observationCardinalityNext;
+    uint16 observationCardinalityNextNew = observations.grow(observationCardinalityNextOld, observationCardinalityNext);
+
+    if (slot0.observationCardinalityNext != observationCardinalityNextNew) {
+      slot0.observationCardinalityNext = observationCardinalityNextNew;
+      emit IncreaseObservationCardinalityNext(observationCardinalityNextOld, observationCardinalityNextNew);
+    }
+  }
+
   ////////////////////////////////////
   /* 内部函数,用于获得合约中token的余额 */
   ////////////////////////////////////
@@ -448,5 +488,9 @@ contract UniswapV3Pool {
 
   function balance1() internal returns (uint256 balance) {
     balance = IERC20(token1).balanceOf(address(this));
+  }
+
+  function _blockTimestamp() internal view virtual returns (uint32 timestamp) {
+    timestamp = uint32(block.timestamp);
   }
 }
