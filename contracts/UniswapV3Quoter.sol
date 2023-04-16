@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.14;
 
 import "./lib/TickMath.sol";
@@ -49,8 +49,8 @@ contract UniswapV3Quoter {
     bytes memory path,
     uint256 amountIn
   ) public returns (uint256 amountOut, uint160[] memory sqrtPriceX96AfterList, int24[] memory tickAfterList) {
-    sqrtPriceX96AfterList = new uint160[](path.numsPools());
-    tickAfterList = new int24[](path.numsPools());
+    sqrtPriceX96AfterList = new uint160[](path.numPools());
+    tickAfterList = new int24[](path.numPools());
 
     uint256 i = 0;
     while (true) {
@@ -90,9 +90,8 @@ contract UniswapV3Quoter {
     }
   }
 
-  function getPool(address token0, address token1, uint24 tickSpacing) internal view returns (IUniswapV3Pool pool) {
+  function getPool(address token0, address token1, uint24 fee) internal view returns (IUniswapV3Pool pool) {
     (token0, token1) = token0 < token1 ? (token0, token1) : (token1, token0);
-
-    pool = IUniswapV3Pool(PoolAddress.computeAddress(factory, token0, token1, tickSpacing));
+    pool = IUniswapV3Pool(PoolAddress.computeAddress(factory, token0, token1, fee));
   }
 }

@@ -6,7 +6,7 @@ import "./UniswapV3Pool.sol";
 
 contract UniswapV3Factory is IUniswapV3PoolDeployer {
   error TokensMustBeDifferent();
-  error UnsupportedTickSpacing();
+  error UnsupportedFee();
   error ZeroAddressNotAllowed();
   error PoolAlreadyExists();
 
@@ -26,7 +26,7 @@ contract UniswapV3Factory is IUniswapV3PoolDeployer {
 
   function createPool(address tokenX, address tokenY, uint24 fee) public returns (address pool) {
     if (tokenX == tokenY) revert TokensMustBeDifferent();
-    if (fees[fee] == 0) revert UnsupportedTickSpacing();
+    if (fees[fee] == 0) revert UnsupportedFee();
 
     (tokenX, tokenY) = tokenX < tokenY ? (tokenX, tokenY) : (tokenY, tokenX);
 

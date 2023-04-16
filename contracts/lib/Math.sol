@@ -79,7 +79,7 @@ library Math {
     uint160 sqrtPriceX96,
     uint128 liquidity,
     uint256 amountIn
-  ) internal pure returns (uint160 sqrtPriceNextX96) {
+  ) internal pure returns (uint160) {
     uint256 numerator = uint256(liquidity) << FixedPoint96.RESOLUTION;
     uint256 product = amountIn * sqrtPriceX96;
 

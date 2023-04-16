@@ -2,12 +2,12 @@
 pragma solidity ^0.8.14;
 
 import "./interfaces/IERC20.sol";
-import "./interfaces/IUniswapV3Manager.sol";
 import "./interfaces/IUniswapV3Pool.sol";
-import "./lib/Path.sol";
-import "./lib/TickMath.sol";
+import "./interfaces/IUniswapV3Manager.sol";
 import "./lib/LiquidityMath.sol";
+import "./lib/Path.sol";
 import "./lib/PoolAddress.sol";
+import "./lib/TickMath.sol";
 
 contract UniswapV3Manager is IUniswapV3Manager {
   using Path for bytes;
@@ -23,7 +23,7 @@ contract UniswapV3Manager is IUniswapV3Manager {
     factory = factory_;
   }
 
-  function GetPosition(
+  function getPosition(
     GetPositionParams calldata params
   )
     public
@@ -44,11 +44,9 @@ contract UniswapV3Manager is IUniswapV3Manager {
   }
 
   function mint(MintParams calldata params) public returns (uint256 amount0, uint256 amount1) {
-    address poolAddress = PoolAddress.computeAddress(factory, params.tokenA, params.tokenB, params.tickSpacing);
-    IUniswapV3Pool pool = IUniswapV3Pool(poolAddress);
+    IUniswapV3Pool pool = getPool(params.tokenA, params.tokenB, params.fee);
 
     (uint160 sqrtPriceX96, , , , ) = pool.slot0();
-
     uint160 sqrtPriceLowerX96 = TickMath.getSqrtRatioAtTick(params.lowerTick);
     uint160 sqrtPriceUpperX96 = TickMath.getSqrtRatioAtTick(params.upperTick);
 
@@ -68,9 +66,7 @@ contract UniswapV3Manager is IUniswapV3Manager {
       abi.encode(IUniswapV3Pool.CallbackData({token0: pool.token0(), token1: pool.token1(), payer: msg.sender}))
     );
 
-    if (amount0 < params.amount0Min || amount1 < params.amount1Min) {
-      revert SlippageCheckFailed(amount0, amount1);
-    }
+    if (amount0 < params.amount0Min || amount1 < params.amount1Min) revert SlippageCheckFailed(amount0, amount1);
   }
 
   function swapSingle(SwapSingleParams calldata params) public returns (uint256 amountOut) {
@@ -78,7 +74,7 @@ contract UniswapV3Manager is IUniswapV3Manager {
       params.amountIn,
       msg.sender,
       params.sqrtPriceLimitX96,
-      SwapCallbackData({path: abi.encodePacked(params.tokenIn, params.tickSpacing, params.tokenOut), payer: msg.sender})
+      SwapCallbackData({path: abi.encodePacked(params.tokenIn, params.fee, params.tokenOut), payer: msg.sender})
     );
   }
 
@@ -151,8 +147,8 @@ contract UniswapV3Manager is IUniswapV3Manager {
     }
   }
 
-  function getPool(address token0, address token1, uint24 tickSpacing) internal view returns (IUniswapV3Pool pool) {
+  function getPool(address token0, address token1, uint24 fee) internal view returns (IUniswapV3Pool pool) {
     (token0, token1) = token0 < token1 ? (token0, token1) : (token1, token0);
-    pool = IUniswapV3Pool(PoolAddress.computeAddress(factory, token0, token1, tickSpacing));
+    pool = IUniswapV3Pool(PoolAddress.computeAddress(factory, token0, token1, fee));
   }
 }

@@ -49,8 +49,8 @@ library Tick {
 
     tickInfo.liquidityGross = liquidityAfter;
     tickInfo.liquidityNet = upper
-      ? int128(int256(tickInfo.liquidityNet) + liquidityDelta)
-      : int128(int256(tickInfo.liquidityNet) - liquidityDelta);
+      ? int128(int256(tickInfo.liquidityNet) - liquidityDelta)
+      : int128(int256(tickInfo.liquidityNet) + liquidityDelta);
   }
 
   function cross(
@@ -97,6 +97,6 @@ library Tick {
     }
 
     feeGrowthInside0X128 = feeGrowthGlobal0X128 - feeGrowthBelow0X128 - feeGrowthAbove0X128;
-    feeGrowthInside1X128 = feeGrowthBelow1X128 - feeGrowthBelow1X128 - feeGrowthAbove1X128;
+    feeGrowthInside1X128 = feeGrowthGlobal1X128 - feeGrowthBelow1X128 - feeGrowthAbove1X128;
   }
 }

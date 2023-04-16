@@ -1,52 +1,39 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.14;
 
+import {mulDiv} from "@prb/math/src/SD59x18.sol";
+
+import "./interfaces/IERC20.sol";
+import "./interfaces/IUniswapV3FlashCallback.sol";
+import "./interfaces/IUniswapV3MintCallback.sol";
+import "./interfaces/IUniswapV3Pool.sol";
+import "./interfaces/IUniswapV3PoolDeployer.sol";
+import "./interfaces/IUniswapV3SwapCallback.sol";
+
 import "./lib/FixedPoint128.sol";
-import "./lib/Tick.sol";
-import "./lib/TickMath.sol";
-import "./lib/TickBitmap.sol";
-import "./lib/Position.sol";
+import "./lib/LiquidityMath.sol";
 import "./lib/Math.sol";
 import "./lib/Oracle.sol";
+import "./lib/Position.sol";
 import "./lib/SwapMath.sol";
-import "./lib/LiquidityMath.sol";
-import "./interfaces/IERC20.sol";
-import "./interfaces/IUniswapV3PoolDeployer.sol";
-import "./interfaces/IUniswapV3MintCallback.sol";
-import "./interfaces/IUniswapV3SwapCallback.sol";
-import "./interfaces/IUniswapV3FlashCallback.sol";
+import "./lib/Tick.sol";
+import "./lib/TickBitmap.sol";
+import "./lib/TickMath.sol";
 
-contract UniswapV3Pool {
+contract UniswapV3Pool is IUniswapV3Pool {
   using Oracle for Oracle.Observation[65535];
+  using Position for Position.Info;
+  using Position for mapping(bytes32 => Position.Info);
   using Tick for mapping(int24 => Tick.Info);
   using TickBitmap for mapping(int16 => uint256);
-  using Position for mapping(bytes32 => Position.Info);
-  using Position for Position.Info;
 
-  // 检查相应代币对是否已初始化
   error AlreadyInitialized();
-  // 用于检查指定tick是否在合法范围内
-  error InvalidTickRange();
-  // 确保希望提供的流动性不为0
-  error ZeroLiquidity();
-  // token转入池子失败
-  error InsufficientInputAmount();
-  // 提示池子流动性为0
-  error NotEnoughLiquidity();
-  // 加入滑点保护
-  error InvalidPriceLimit();
-  // 闪电贷价格支付不起
   error FlashLoanNotPaid();
-
-  event Mint(
-    address sender,
-    address indexed owner,
-    int24 indexed tickLower,
-    int24 indexed tickUpper,
-    uint128 amount,
-    uint256 amount0,
-    uint256 amount1
-  );
+  error InsufficientInputAmount();
+  error InvalidPriceLimit();
+  error InvalidTickRange();
+  error NotEnoughLiquidity();
+  error ZeroLiquidity();
 
   event Burn(
     address indexed owner,
@@ -66,6 +53,20 @@ contract UniswapV3Pool {
     uint256 amount1
   );
 
+  event Flash(address indexed recipient, uint256 amount0, uint256 amount1);
+
+  event IncreaseObservationCardinalityNext(uint16 observationCardinalityNextOld, uint16 observationCardinalityNextNew);
+
+  event Mint(
+    address sender,
+    address indexed owner,
+    int24 indexed tickLower,
+    int24 indexed tickUpper,
+    uint128 amount,
+    uint256 amount0,
+    uint256 amount1
+  );
+
   event Swap(
     address indexed sender,
     address indexed recipient,
@@ -75,10 +76,6 @@ contract UniswapV3Pool {
     uint128 liquidity,
     int24 tick
   );
-
-  event Flash(address indexed recipient, uint256 amount0, uint256 amount1);
-
-  event IncreaseObservationCardinalityNext(uint16 observationCardinalityNextOld, uint16 observationCardinalityNextNew);
 
   // Pool parameters
   address public immutable factory;
@@ -90,18 +87,17 @@ contract UniswapV3Pool {
   uint256 public feeGrowthGlobal0X128;
   uint256 public feeGrowthGlobal1X128;
 
-  uint128 public liquidity;
-
-  mapping(int24 => Tick.Info) public ticks;
-  mapping(int16 => uint256) public tickBitmap;
-  mapping(bytes32 => Position.Info) public positions;
-  Oracle.Observation[65535] public observations;
-
+  // First slot will contain essential data
   struct Slot0 {
+    // Current sqrt(P)
     uint160 sqrtPriceX96;
+    // Current tick
     int24 tick;
+    // Most recent observation index
     uint16 observationIndex;
+    // Maximum number of observations
     uint16 observationCardinality;
+    // Next maximum number of observations
     uint16 observationCardinalityNext;
   }
 
@@ -124,14 +120,15 @@ contract UniswapV3Pool {
     uint256 feeAmount;
   }
 
-  struct ModifyPositionParams {
-    address owner;
-    int24 lowerTick;
-    int24 upperTick;
-    int128 liquidityDelta;
-  }
-
   Slot0 public slot0;
+
+  // Amount of liquidity, L.
+  uint128 public liquidity;
+
+  mapping(int24 => Tick.Info) public ticks;
+  mapping(int16 => uint256) public tickBitmap;
+  mapping(bytes32 => Position.Info) public positions;
+  Oracle.Observation[65535] public observations;
 
   constructor() {
     (factory, token0, token1, tickSpacing, fee) = IUniswapV3PoolDeployer(msg.sender).parameters();
@@ -153,9 +150,17 @@ contract UniswapV3Pool {
     });
   }
 
+  struct ModifyPositionParams {
+    address owner;
+    int24 lowerTick;
+    int24 upperTick;
+    int128 liquidityDelta;
+  }
+
   function _modifyPosition(
     ModifyPositionParams memory params
   ) internal returns (Position.Info storage position, int256 amount0, int256 amount1) {
+    // gas optimizations
     Slot0 memory slot0_ = slot0;
     uint256 feeGrowthGlobal0X128_ = feeGrowthGlobal0X128;
     uint256 feeGrowthGlobal1X128_ = feeGrowthGlobal1X128;
@@ -179,8 +184,13 @@ contract UniswapV3Pool {
       true
     );
 
-    if (flippedLower) tickBitmap.flipTick(params.lowerTick, int24(tickSpacing));
-    if (flippedUpper) tickBitmap.flipTick(params.upperTick, int24(tickSpacing));
+    if (flippedLower) {
+      tickBitmap.flipTick(params.lowerTick, int24(tickSpacing));
+    }
+
+    if (flippedUpper) {
+      tickBitmap.flipTick(params.upperTick, int24(tickSpacing));
+    }
 
     (uint256 feeGrowthInside0X128, uint256 feeGrowthInside1X128) = ticks.getFeeGrowthInside(
       params.lowerTick,
@@ -200,7 +210,9 @@ contract UniswapV3Pool {
       );
     } else if (slot0_.tick < params.upperTick) {
       amount0 = Math.calcAmount0Delta(slot0_.sqrtPriceX96, TickMath.getSqrtRatioAtTick(params.upperTick), params.liquidityDelta);
+
       amount1 = Math.calcAmount1Delta(TickMath.getSqrtRatioAtTick(params.lowerTick), slot0_.sqrtPriceX96, params.liquidityDelta);
+
       liquidity = LiquidityMath.addLiquidity(liquidity, params.liquidityDelta);
     } else {
       amount1 = Math.calcAmount1Delta(
@@ -211,24 +223,15 @@ contract UniswapV3Pool {
     }
   }
 
-  /**
-   * @dev 在Uniswap V2中,提供流动性的方法为mint(),因为V2池子会给予LP-token作为提供流动性的交换
-   *      但在V3中,虽然没有这种行为了,但还是保留了mint()方法
-   * @param owner token 所有者的地址,用来识别是谁提供的流动性
-   * @param upperTick tick上下界,设置价格区间边界
-   * @param lowerTick tick下界
-   * @param amount 期望提供的流动性数量
-   * @return amount0
-   * @return amount1
-   */
   function mint(
     address owner,
-    int24 upperTick,
     int24 lowerTick,
+    int24 upperTick,
     uint128 amount,
     bytes calldata data
   ) external returns (uint256 amount0, uint256 amount1) {
     if (lowerTick >= upperTick || lowerTick < TickMath.MIN_TICK || upperTick > TickMath.MAX_TICK) revert InvalidTickRange();
+
     if (amount == 0) revert ZeroLiquidity();
 
     (, int256 amount0Int, int256 amount1Int) = _modifyPosition(
@@ -244,22 +247,15 @@ contract UniswapV3Pool {
     if (amount0 > 0) balance0Before = balance0();
     if (amount1 > 0) balance1Before = balance1();
 
-    // uniswapV3MintCallback 函数的实现是由调用者(即在调用 uniswapV3MintCallback 函数时传递的合约)来提供的
-    // 且普通的账户地址无法调用,得要合约地址
-    // 注意: 要将msg.sender转换为IUniswapV3MintCallback接口类型,这样才能调用其函数
     IUniswapV3MintCallback(msg.sender).uniswapV3MintCallback(amount0, amount1, data);
 
-    if (amount0 > 0 && balance0Before + amount0 > balance0()) {
-      revert InsufficientInputAmount();
-    }
-    if (amount1 > 0 && balance1Before + amount1 > balance1()) {
-      revert InsufficientInputAmount();
-    }
+    if (amount0 > 0 && balance0Before + amount0 > balance0()) revert InsufficientInputAmount();
+
+    if (amount1 > 0 && balance1Before + amount1 > balance1()) revert InsufficientInputAmount();
 
     emit Mint(msg.sender, owner, lowerTick, upperTick, amount, amount0, amount1);
   }
 
-  /// @dev 从池子中移除流动性(移出的流动性代币提取实现是在collect())
   function burn(int24 lowerTick, int24 upperTick, uint128 amount) public returns (uint256 amount0, uint256 amount1) {
     (Position.Info storage position, int256 amount0Int, int256 amount1Int) = _modifyPosition(
       ModifyPositionParams({owner: msg.sender, lowerTick: lowerTick, upperTick: upperTick, liquidityDelta: -(int128(amount))})
@@ -278,7 +274,6 @@ contract UniswapV3Pool {
     emit Burn(msg.sender, lowerTick, upperTick, amount, amount0, amount1);
   }
 
-  /// @dev 提取相应position中未转换为流动性的代币
   function collect(
     address recipient,
     int24 lowerTick,
@@ -286,7 +281,7 @@ contract UniswapV3Pool {
     uint128 amount0Requested,
     uint128 amount1Requested
   ) public returns (uint128 amount0, uint128 amount1) {
-    Position.Info memory position = positions.get(msg.sender, lowerTick, upperTick);
+    Position.Info storage position = positions.get(msg.sender, lowerTick, upperTick);
 
     amount0 = amount0Requested > position.tokensOwed0 ? position.tokensOwed0 : amount0Requested;
     amount1 = amount1Requested > position.tokensOwed1 ? position.tokensOwed1 : amount1Requested;
@@ -304,15 +299,6 @@ contract UniswapV3Pool {
     emit Collect(msg.sender, recipient, lowerTick, upperTick, amount0, amount1);
   }
 
-  /**
-   * @dev 在一对交易对中进行交易,并更新相应价格和流动性
-   * @param recipient token接收者地址
-   * @param zeroForOne 为true时,token0 -> token1,为false时,token1 -> token0
-   * @param amountSpecified 用户期望交易的数量
-   * @param sqrtPriceLimitX96 成交价格限制,防滑点
-   * @return amount0
-   * @return amount1
-   */
   function swap(
     address recipient,
     bool zeroForOne,
@@ -320,6 +306,7 @@ contract UniswapV3Pool {
     uint160 sqrtPriceLimitX96,
     bytes calldata data
   ) public returns (int256 amount0, int256 amount1) {
+    // Caching for gas saving
     Slot0 memory slot0_ = slot0;
     uint128 liquidity_ = liquidity;
 
@@ -327,9 +314,7 @@ contract UniswapV3Pool {
       zeroForOne
         ? sqrtPriceLimitX96 > slot0_.sqrtPriceX96 || sqrtPriceLimitX96 < TickMath.MIN_SQRT_RATIO
         : sqrtPriceLimitX96 < slot0_.sqrtPriceX96 || sqrtPriceLimitX96 > TickMath.MAX_SQRT_RATIO
-    ) {
-      revert InvalidPriceLimit();
-    }
+    ) revert InvalidPriceLimit();
 
     SwapState memory state = SwapState({
       amountSpecifiedRemaining: amountSpecified,
@@ -345,12 +330,12 @@ contract UniswapV3Pool {
 
       step.sqrtPriceStartX96 = state.sqrtPriceX96;
 
-      (step.nextTick, ) = tickBitmap.nextInitializedTickWithinOneWord(state.tick, 1, zeroForOne);
+      (step.nextTick, ) = tickBitmap.nextInitializedTickWithinOneWord(state.tick, int24(tickSpacing), zeroForOne);
 
       step.sqrtPriceNextX96 = TickMath.getSqrtRatioAtTick(step.nextTick);
 
       (state.sqrtPriceX96, step.amountIn, step.amountOut, step.feeAmount) = SwapMath.computeSwapStep(
-        step.sqrtPriceStartX96,
+        state.sqrtPriceX96,
         (zeroForOne ? step.sqrtPriceNextX96 < sqrtPriceLimitX96 : step.sqrtPriceNextX96 > sqrtPriceLimitX96)
           ? sqrtPriceLimitX96
           : step.sqrtPriceNextX96,
@@ -373,15 +358,11 @@ contract UniswapV3Pool {
           (zeroForOne ? feeGrowthGlobal1X128 : state.feeGrowthGlobalX128)
         );
 
-        if (zeroForOne) {
-          liquidityDelta = -liquidityDelta;
-        }
+        if (zeroForOne) liquidityDelta = -liquidityDelta;
 
         state.liquidity = LiquidityMath.addLiquidity(state.liquidity, liquidityDelta);
 
-        if (state.liquidity == 0) {
-          revert NotEnoughLiquidity();
-        }
+        if (state.liquidity == 0) revert NotEnoughLiquidity();
 
         state.tick = zeroForOne ? step.nextTick - 1 : step.nextTick;
       } else if (state.sqrtPriceX96 != step.sqrtPriceStartX96) {
@@ -391,12 +372,13 @@ contract UniswapV3Pool {
 
     if (state.tick != slot0_.tick) {
       (uint16 observationIndex, uint16 observationCardinality) = observations.write(
-        slot0.observationIndex,
+        slot0_.observationIndex,
         _blockTimestamp(),
-        slot0.tick,
-        slot0.observationCardinality,
-        slot0.observationCardinalityNext
+        slot0_.tick,
+        slot0_.observationCardinality,
+        slot0_.observationCardinalityNext
       );
+
       (slot0.sqrtPriceX96, slot0.tick, slot0.observationIndex, slot0.observationCardinality) = (
         state.sqrtPriceX96,
         state.tick,
@@ -407,9 +389,7 @@ contract UniswapV3Pool {
       slot0.sqrtPriceX96 = state.sqrtPriceX96;
     }
 
-    if (liquidity_ != state.liquidity) {
-      liquidity = state.liquidity;
-    }
+    if (liquidity_ != state.liquidity) liquidity = state.liquidity;
 
     if (zeroForOne) {
       feeGrowthGlobal0X128 = state.feeGrowthGlobalX128;
@@ -426,20 +406,16 @@ contract UniswapV3Pool {
 
       uint256 balance0Before = balance0();
       IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
-      if (balance0Before + uint256(amount0) > balance0()) {
-        revert InsufficientInputAmount();
-      }
+      if (balance0Before + uint256(amount0) > balance0()) revert InsufficientInputAmount();
     } else {
-      IERC20(token1).transfer(recipient, uint256(-amount0));
+      IERC20(token0).transfer(recipient, uint256(-amount0));
 
       uint256 balance1Before = balance1();
       IUniswapV3SwapCallback(msg.sender).uniswapV3SwapCallback(amount0, amount1, data);
-      if (balance1Before + uint256(amount1) > balance1()) {
-        revert InsufficientInputAmount();
-      }
+      if (balance1Before + uint256(amount1) > balance1()) revert InsufficientInputAmount();
     }
 
-    emit Swap(msg.sender, recipient, amount0, amount1, slot0.sqrtPriceX96, liquidity, slot0.tick);
+    emit Swap(msg.sender, recipient, amount0, amount1, slot0.sqrtPriceX96, state.liquidity, slot0.tick);
   }
 
   function flash(uint256 amount0, uint256 amount1, bytes calldata data) public {
@@ -449,12 +425,8 @@ contract UniswapV3Pool {
     uint256 balance0Before = IERC20(token0).balanceOf(address(this));
     uint256 balance1Before = IERC20(token1).balanceOf(address(this));
 
-    if (amount0 > 0) {
-      IERC20(token0).transfer(msg.sender, amount0);
-    }
-    if (amount1 > 0) {
-      IERC20(token1).transfer(msg.sender, amount1);
-    }
+    if (amount0 > 0) IERC20(token0).transfer(msg.sender, amount0);
+    if (amount1 > 0) IERC20(token1).transfer(msg.sender, amount1);
 
     IUniswapV3FlashCallback(msg.sender).uniswapV3FlashCallback(fee0, fee1, data);
 
@@ -472,16 +444,17 @@ contract UniswapV3Pool {
     uint16 observationCardinalityNextOld = slot0.observationCardinalityNext;
     uint16 observationCardinalityNextNew = observations.grow(observationCardinalityNextOld, observationCardinalityNext);
 
-    if (slot0.observationCardinalityNext != observationCardinalityNextNew) {
+    if (observationCardinalityNextNew != observationCardinalityNextOld) {
       slot0.observationCardinalityNext = observationCardinalityNextNew;
       emit IncreaseObservationCardinalityNext(observationCardinalityNextOld, observationCardinalityNextNew);
     }
   }
 
-  ////////////////////////////////////
-  /* 内部函数,用于获得合约中token的余额 */
-  ////////////////////////////////////
-
+  ////////////////////////////////////////////////////////////////////////////
+  //
+  // INTERNAL
+  //
+  ////////////////////////////////////////////////////////////////////////////
   function balance0() internal returns (uint256 balance) {
     balance = IERC20(token0).balanceOf(address(this));
   }
@@ -490,7 +463,7 @@ contract UniswapV3Pool {
     balance = IERC20(token1).balanceOf(address(this));
   }
 
-  function _blockTimestamp() internal view virtual returns (uint32 timestamp) {
+  function _blockTimestamp() internal view returns (uint32 timestamp) {
     timestamp = uint32(block.timestamp);
   }
 }

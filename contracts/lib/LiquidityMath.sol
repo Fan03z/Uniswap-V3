@@ -48,8 +48,8 @@ library LiquidityMath {
     if (sqrtPriceX96 <= sqrtPriceAX96) {
       liquidity = getLiquidityForAmount0(sqrtPriceAX96, sqrtPriceBX96, amount0);
     } else if (sqrtPriceX96 <= sqrtPriceBX96) {
-      uint128 liquidity0 = getLiquidityForAmount0(sqrtPriceX96, sqrtPriceAX96, amount0);
-      uint128 liquidity1 = getLiquidityForAmount1(sqrtPriceX96, sqrtPriceBX96, amount1);
+      uint128 liquidity0 = getLiquidityForAmount0(sqrtPriceX96, sqrtPriceBX96, amount0);
+      uint128 liquidity1 = getLiquidityForAmount1(sqrtPriceAX96, sqrtPriceX96, amount1);
 
       liquidity = liquidity0 < liquidity1 ? liquidity0 : liquidity1;
     } else {
@@ -57,7 +57,7 @@ library LiquidityMath {
     }
   }
 
-  function addLiquidity(uint128 x, int128 y) public pure returns (uint128 z) {
+  function addLiquidity(uint128 x, int128 y) internal pure returns (uint128 z) {
     if (y < 0) {
       z = x - uint128(-y);
     } else {
