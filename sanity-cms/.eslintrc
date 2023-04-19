@@ -1,0 +1,5 @@
+{
+  "extends": "@sanity/eslint-config-studio",
+  // Add this line to stop reporting errors in ./schemas
+  "eslint.workingDirectories": ["./web", "./studio"]
+}
