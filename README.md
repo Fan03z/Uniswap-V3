@@ -11,8 +11,6 @@ Uniswap V3(后面简称 Uniswap)中的合约分为 **核心合约(core contracts
 
 ## Sanity --Backend (CMS)
 
-> > > > > > > main
-
 操作步骤文档: <https://www.sanity.io/docs/getting-started-with-sanity?utm_source=readme>
 
 参考文档: <https://www.sanity.io/docs/reference?utm_source=readme>
