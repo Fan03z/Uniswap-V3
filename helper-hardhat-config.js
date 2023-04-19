@@ -11,8 +11,15 @@ const networkConfig = {
 };
 
 const developmentChains = ["hardhat", "localhost", "ganache"];
+const VERIFICATION_BLOCK_CONFIRMATIONS = 6;
+
+const frontEndContractsFile = "./ui/constants/address.json";
+const frontEndAbiLocation = "../ui/constants/abi/";
 
 module.exports = {
   networkConfig,
   developmentChains,
+  VERIFICATION_BLOCK_CONFIRMATIONS,
+  frontEndContractsFile,
+  frontEndAbiLocation,
 };
