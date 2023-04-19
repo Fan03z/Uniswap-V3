@@ -1,3 +1,5 @@
+/* 池子合约(pool)实现去中心化交易的核心逻辑 */
+
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.14;
 
@@ -19,8 +21,6 @@ import "./lib/SwapMath.sol";
 import "./lib/Tick.sol";
 import "./lib/TickBitmap.sol";
 import "./lib/TickMath.sol";
-
-// 试一下
 
 contract UniswapV3Pool is IUniswapV3Pool {
   using Oracle for Oracle.Observation[65535];
