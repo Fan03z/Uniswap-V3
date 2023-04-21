@@ -5,6 +5,7 @@ import "./LiquidityMath.sol";
 
 library Tick {
   struct Info {
+    // 记录该tick是否已经被初始化
     bool initialized;
     // 当前处于激活状态的总流动性
     uint128 liquidityGross;
@@ -17,7 +18,7 @@ library Tick {
   /**
    * @dev 更新流动性
    * @param self mapping(int24 => Tick.Info)
-   * @param tick tick
+   * @param tick 更新的tick位置(应该就是当前的tick)
    * @param liquidityDelta 流动性变化量
    * @param upper 流动性增减方向
    */
@@ -30,8 +31,10 @@ library Tick {
     uint256 feeGrowthGlobal1X128,
     bool upper
   ) internal returns (bool flipped) {
+    // 获取当前tick上的信息
     Tick.Info storage tickInfo = self[tick];
 
+    // 为当前tick添加流动性,liquidityBefore记录添加前的流动性,liquidityAfter计算添加后的流动性
     uint128 liquidityBefore = tickInfo.liquidityGross;
     uint128 liquidityAfter = LiquidityMath.addLiquidity(liquidityBefore, liquidityDelta);
 
@@ -43,10 +46,12 @@ library Tick {
         tickInfo.feeGrowthOutside0X128 = feeGrowthGlobal0X128;
         tickInfo.feeGrowthOutside1X128 = feeGrowthGlobal1X128;
       }
-
+      // liquidityBefore等于0,说明该tick还没用过,没被提供过流动性
+      // 当前tick未被初始化,进行初始化
       tickInfo.initialized = true;
     }
 
+    // 更新该tick下处于激活状态流动性的数量为添加后的流动性数量
     tickInfo.liquidityGross = liquidityAfter;
     tickInfo.liquidityNet = upper
       ? int128(int256(tickInfo.liquidityNet) - liquidityDelta)

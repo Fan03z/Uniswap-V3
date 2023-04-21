@@ -57,6 +57,12 @@ library LiquidityMath {
     }
   }
 
+  /**
+   * @dev 计算流动性
+   * @param x 流动性计算前值
+   * @param y 流动性变化量
+   * @return z 流动性计算后值
+   */
   function addLiquidity(uint128 x, int128 y) internal pure returns (uint128 z) {
     if (y < 0) {
       z = x - uint128(-y);
