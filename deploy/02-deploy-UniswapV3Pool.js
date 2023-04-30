@@ -1,49 +1,59 @@
 const { network, ethers } = require("hardhat");
 const { developmentChains } = require("../helper-hardhat-config");
+const { deployPool } = require("../utils/deployPool");
 const { verify } = require("../utils/verify");
 
 module.exports = async ({ getNamedAccounts, deployments }) => {
   const { deploy, log } = deployments;
   const { deployer } = await getNamedAccounts();
-
-  let UniswapV3PoolArgs = [];
+  const [owner] = await ethers.getSigners();
 
   if (developmentChains.includes(network.name)) {
-    const WETH = await ethers.getContract("MockWETH", deployer);
-    const USDC = await ethers.getContract("MockUSDC", deployer);
+    const factory = await ethers.getContract("UniswapV3Factory");
+    const WETH = await ethers.getContract("WETHContract");
+    const USDC = await ethers.getContract("USDCContract");
+    const UNI = await ethers.getContract("UNIContract");
+    const WBTC = await ethers.getContract("WBTCContract");
+    const USDT = await ethers.getContract("USDTContract");
 
-    // 硬编码tick和sqrt(p),用于本地测试
-    const currentTick = 85176;
-    const currentSqrtP = ethers.BigNumber.from(
-      "5602277097478614198912276234240"
+    const wethUsdc = await deployPool(
+      factory,
+      WETH.address,
+      USDC.address,
+      3000,
+      5000
     );
+    log(`WETH/USDC pool address: ${wethUsdc.address}`);
 
-    UniswapV3PoolArgs = [WETH.address, USDC.address, currentSqrtP, currentTick];
+    const wethUni = await deployPool(
+      factory,
+      WETH.address,
+      UNI.address,
+      3000,
+      10
+    );
+    log(`WETH/UNI pool address: ${wethUni.address}`);
 
-    log("----------------------");
-  }
+    const wbtcUsdt = await deployPool(
+      factory,
+      WBTC.address,
+      USDT.address,
+      3000,
+      20000
+    );
+    log(`WBTC/USDT pool address: ${wbtcUsdt.address}`);
 
-  // 待处理
-  if (!developmentChains.includes(network.name)) {
-    UniswapV3PoolArgs = [];
-  }
-
-  const UniswapV3Pool = await deploy("UniswapV3Pool", {
-    from: deployer,
-    args: UniswapV3PoolArgs,
-    log: true,
-    waitConfirmations: network.config.blockConfirmations || 1,
-  });
-
-  if (
-    !developmentChains.includes(network.name) &&
-    process.env.ETHERSCAN_API_KEY
-  ) {
-    log("Wait to verify UniswapV3Pool...");
-    await verify(UniswapV3Pool.address, UniswapV3PoolArgs);
+    const usdtUsdc = await deployPool(
+      factory,
+      USDT.address,
+      USDC.address,
+      500,
+      1
+    );
+    log(`USDT/USDC pool address: ${usdtUsdc.address}`);
 
     log("----------------------");
   }
 };
 
-module.exports.tags = ["all", "UniswapV3Pool"];
+module.exports.tags = ["all", "uniswapV3Pool"];

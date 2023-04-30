@@ -4,7 +4,7 @@ const {
   frontEndContractsFile,
   frontEndAbiLocation,
 } = require("../helper-hardhat-config");
-require("dotenv").condfig();
+require("dotenv").config();
 
 module.exports = async () => {
   if (process.env.UPDATE_FRONT_END) {

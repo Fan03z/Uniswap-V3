@@ -26,4 +26,4 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
   }
 };
 
-module.exports.tags = ["all", "UniswapV3Manager"];
+module.exports.tags = ["all", "uniswapV3Manager"];

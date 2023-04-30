@@ -3,6 +3,7 @@ node_modules
 .secret2
 cache
 bin
+deployments
 # 提供了 .env.example 文件
 .env
 artifacts
