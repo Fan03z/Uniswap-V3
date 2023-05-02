@@ -10,6 +10,7 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
 
   if (developmentChains.includes(network.name)) {
     const factory = await ethers.getContract("UniswapV3Factory");
+    const manager = await ethers.getContract("UniswapV3Manager");
     const WETH = await ethers.getContract("WETHContract");
     const USDC = await ethers.getContract("USDCContract");
     const UNI = await ethers.getContract("UNIContract");
@@ -53,6 +54,24 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
     log(`USDT/USDC pool address: ${usdtUsdc.address}`);
 
     log("----------------------");
+
+    log("Adding liquidity to pool...");
+
+    // FIXME:
+    // wethUsdc
+    const Addliquidity = await manager.mint({
+      tokenA: WETH.address,
+      tokenB: USDC.address,
+      fee: 3000,
+      lowerTick: 4545,
+      upperTick: 5500,
+      amount0Desired: ethers.utils.parseEther("1"),
+      amount1Desired: ethers.utils.parseEther("5000"),
+      amount0Min: ethers.utils.parseEther("0.5"),
+      amount1Min: ethers.utils.parseEther("2500"),
+    });
+    await Addliquidity.wait(1);
+    log(Addliquidity);
   }
 };
 

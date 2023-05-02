@@ -7,26 +7,26 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
   const { deployer } = await getNamedAccounts();
 
   // FIXME: ???:是否要先部署Manager合约里面的lib合约库,此处好像不需要也可以部署Manager合约
-  // const LiquidityMath = await deploy("LiquidityMath", {
-  //   from: deployer,
-  //   log: false,
-  //   waitConfirmations: network.config.blockConfirmations || 1,
-  // });
-  // const TickMath = await deploy("TickMath", {
-  //   from: deployer,
-  //   log: false,
-  //   waitConfirmations: network.config.blockConfirmations || 1,
-  // });
-  // const Path = await deploy("Path", {
-  //   from: deployer,
-  //   log: false,
-  //   waitConfirmations: network.config.blockConfirmations || 1,
-  // });
-  // const PoolAddress = await deploy("PoolAddress", {
-  //   from: deployer,
-  //   log: false,
-  //   waitConfirmations: network.config.blockConfirmations || 1,
-  // });
+  const LiquidityMath = await deploy("LiquidityMath", {
+    from: deployer,
+    log: false,
+    waitConfirmations: network.config.blockConfirmations || 1,
+  });
+  const TickMath = await deploy("TickMath", {
+    from: deployer,
+    log: false,
+    waitConfirmations: network.config.blockConfirmations || 1,
+  });
+  const Path = await deploy("Path", {
+    from: deployer,
+    log: false,
+    waitConfirmations: network.config.blockConfirmations || 1,
+  });
+  const PoolAddress = await deploy("PoolAddress", {
+    from: deployer,
+    log: false,
+    waitConfirmations: network.config.blockConfirmations || 1,
+  });
 
   const UniswapV3Factory = await ethers.getContract("UniswapV3Factory");
 

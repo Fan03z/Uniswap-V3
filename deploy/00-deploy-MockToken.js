@@ -80,32 +80,47 @@ module.exports = async ({ getNamedAccounts, deployments }) => {
 
     log("----------------------");
 
-    log("Minting test token...");
+    log("Minting and approving test token...");
 
     const wbtc = new ethers.Contract(WBTC.address, WBTC.abi, owner);
-    const WBTCMintTx = await wbtc.mint(addr1.address, 30);
+    const WBTCMintTx = await wbtc.mint(owner.address, 30);
     await WBTCMintTx.wait(1);
-    log(`30 WBTC mint to ${addr1.address}`);
+    log(`30 WBTC mint to ${owner.address}`);
+
+    const WBTCApproveTx = await wbtc.approve(owner.address, 30);
+    await WBTCApproveTx.wait(1);
 
     const weth = new ethers.Contract(WETH.address, WETH.abi, owner);
-    const WETHMintTx = await weth.mint(addr2.address, 100);
+    const WETHMintTx = await weth.mint(owner.address, 100);
     await WETHMintTx.wait(1);
-    log(`100 WETH mint to ${addr2.address}`);
+    log(`100 WETH mint to ${owner.address}`);
+
+    const WETHApproveTx = await weth.approve(owner.address, 100);
+    await WETHApproveTx.wait(1);
 
     const uni = new ethers.Contract(UNI.address, UNI.abi, owner);
-    const UNIMintTx = await uni.mint(addr3.address, 400000);
+    const UNIMintTx = await uni.mint(owner.address, 400000);
     await UNIMintTx.wait(1);
-    log(`400000 UNI mint to ${addr3.address}`);
+    log(`400000 UNI mint to ${owner.address}`);
+
+    const UNIApproveTx = await uni.approve(owner.address, 400000);
+    await UNIApproveTx.wait(1);
 
     const usdc = new ethers.Contract(USDC.address, USDC.abi, owner);
-    const USDCMintTx = await usdc.mint(addr4.address, 500000);
+    const USDCMintTx = await usdc.mint(owner.address, 500000);
     await USDCMintTx.wait(1);
-    log(`500000 USDC mint to ${addr4.address}`);
+    log(`500000 USDC mint to ${owner.address}`);
+
+    const USDCApproveTx = await usdc.approve(owner.address, 500000);
+    await USDCApproveTx.wait(1);
 
     const usdt = new ethers.Contract(USDT.address, USDT.abi, owner);
-    const USDTMintTx = await usdt.mint(addr5.address, 500000);
+    const USDTMintTx = await usdt.mint(owner.address, 500000);
     await USDTMintTx.wait(1);
-    log(`500000 USDT mint to ${addr5.address}`);
+    log(`500000 USDT mint to ${owner.address}`);
+
+    const USDTApproveTx = await usdt.approve(owner.address, 500000);
+    await USDTApproveTx.wait(1);
 
     log("----------------------");
   }
