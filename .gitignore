@@ -15,6 +15,7 @@ flat
 botDaddies.ts
 botDaddies2.ts
 out
+forge-cache
 deployments
 # 防macos生成的文件
 .DS_Store
