@@ -5,6 +5,7 @@ require("solidity-coverage");
 require("hardhat-gas-reporter");
 require("hardhat-contract-sizer");
 require("dotenv").config();
+require("@nomicfoundation/hardhat-foundry");
 
 /**
  * @type import('hardhat/config').HardhatUserConfig
