@@ -15,7 +15,7 @@ Uniswap V3(后面简称 Uniswap)中的合约分为 **核心合约(core contracts
 
 具体混合 hardhat 和 Foundry 的框架可以参考: <https://hardhat.org/hardhat-runner/docs/advanced/hardhat-and-foundry> 和 <https://learnblockchain.cn/docs/foundry/i18n/zh/config/hardhat.html>
 
-过程步骤:
+**过程步骤**:
 
 1. 首先安装 @nomicfoundation/hardhat-foundry 包 `yarn add --dev hardhat @nomicfoundation/hardhat-foundry`
 2. 在 hardhat.config.js 中导入: `require("@nomicfoundation/hardhat-foundry");`
@@ -52,7 +52,3 @@ cache_path  = 'forge-cache'
 > 如果是仅是项目本地安装 sanity 的话,可能也要加入本地项目环境变量`export PATH="./node_modules/.bin:$PATH"`
 
 3. cd 到 sanity 项目目录,启动 sanity 项目:`yarn run dev`,然后就可以访问 <http://localhost:3333/>
-
-```
-
-```
